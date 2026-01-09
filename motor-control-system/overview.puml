@@ -1,0 +1,701 @@
+@startuml CCA-v0.2-Motor-Control-System-Decomposition
+' !pragma layout smetana
+
+title Motor control system - Overview
+
+rectangle "Core definitions" as CCACorePkg {
+	' Provision - Represents an interface provided by a capability
+	struct Provision <<Record>> {
+		String name
+		Class<?> interfaceType
+		String description
+	}
+	' Requirement - Represents an interface required by a capability
+	struct Requirement <<Record>> {
+		String name
+		Class<?> interfaceType
+		boolean optional
+		String description
+	}
+	' Protocol - Describes how interaction occurs
+	struct Protocol <<Record>> {
+		String name
+		CommunicationMechanism mechanism
+		DataFormat dataFormat
+		Map<String, String> qualityAttributes
+	}
+	enum CommunicationMechanism {
+		DIRECT_CALL 	// In-process, synchronous
+		ASYNC_MESSAGE	// Asynchronous messaging
+		SHARED_MEMORY	// Direct memory access
+		INTERRUPT_DRIVEN // Hardware interrupt
+	}
+	enum DataFormat {
+		BINARY
+		JSON
+		PROTOBUF
+		RAW_MEMORY
+	}
+	abstract class CapabilityContract {
+		#List<Provision> provisions
+		#List<Requirement> requirements
+		#List<Protocol> protocols
+		+List<Provision> getProvisions()
+		+List<Requirement> getRequirements()
+		+List<Protocol> getProtocols()
+	}
+	CommunicationMechanism <.. Protocol
+	DataFormat <.. Protocol
+	Provision <.. CapabilityContract : use
+	Requirement <.. CapabilityContract : use
+	Protocol <.. CapabilityContract : use
+
+	enum LifecycleState {
+		NOT_CREATED
+		CREATED
+		INITIALIZED
+		DEPENDENCIES_INJECTED
+		STARTED
+		STOPPED
+		CLEANED_UP
+	}
+
+	interface CapabilityInstance {
+		void initialize()
+		void start()
+		void stop()
+		void cleanup()
+		Object getContractImplementation(Class<?> contractType)
+		void injectDependency(Class<?> contractType, Object implementation)
+	}
+	class CapabilityRegistry {
+		-Map<String, CapabilityDescriptor> descriptors
+		-Map<String, CapabilityInstance> instances
+		-Map<Class<?>, String> provisionToCapabilityMap
+		-DirectedGraph<String> dependencyGraph
+		+public CapabilityRegistry()
+		+void registerCapability(CapabilityDescriptor descriptor)
+		+void registerInstance(String capabilityId, CapabilityInstance instance)
+		+void buildDependencyGraph()
+		+List<String> getInitializationOrder()
+		+CapabilityInstance getInstance(String capabilityId)
+		+CapabilityDescriptor getDescriptor(String capabilityId)
+		+String findProvider(Class<?> contractType)
+		+Set<String> getAllCapabilityIds()
+	}
+	class CapabilityFactory {
+		-Map<String, Object> constructorParameters
+		+CapabilityFactory()
+		+void registerParameters(String capabilityType, Object... params)
+		+CapabilityInstance createInstance(CapabilityDescriptor descriptor)
+		-CapabilityInstance createWithParameters(Class<? extends CapabilityInstance> clazz, Object[] params)
+	}
+	class CapabilityLifecycleManager {
+		-CapabilityRegistry registry
+		-CapabilityFactory factory
+		-Map<String, LifecycleState> stateMap
+		+CapabilityLifecycleManager(CapabilityRegistry registry, CapabilityFactory factory)
+		+void initializeAll()
+		-void initializeCapability(String capabilityId)
+		+void injectDependencies()
+		-void injectDependenciesForCapability(String capabilityId)
+		+void startAll()
+		-void startCapability(String capabilityId)
+		+void stopAll()
+		-void stopCapability(String capabilityId)
+		+void cleanupAll()
+		-void cleanupCapability(String capabilityId)
+		+LifecycleState getState(String capabilityId)
+		+void startSystem()
+		+void shutdownSystem()
+	}
+	LifecycleState <.. CapabilityLifecycleManager
+	CapabilityRegistry <.. CapabilityLifecycleManager
+	CapabilityFactory <.. CapabilityLifecycleManager
+	CapabilityLifecycleManager ..> CapabilityInstance
+}
+
+rectangle "Motor Control Capability" as MotorControlCapabilityPkg {
+	note as MotorControlCapabilityNote
+		Encapsulates the PID control algorithm
+		that regulates motor speed and position.
+	end note
+
+	class MotorControlContract {
+		+{static} MotorControlContract create()
+	}
+	CapabilityContract <|-- MotorControlContract
+
+	rectangle "Provided contracts" as MotorMgmtProvisionsPkg {
+		interface MotorControlService {
+			void setTargetSpeed(double speedRPM);
+			void setTargetPosition(double positionDegrees);
+			MotorStatus getCurrentStatus();
+			void emergencyStop();
+		}
+		struct MotorStatus <<Record>> {
+			double currentSpeed,
+			double currentPosition,
+			MotorState state,
+			long timestamp
+		}
+		enum MotorState {
+			STOPPED
+			RUNNING
+			FAULT
+			EMERGENCY_STOP
+		}
+		MotorControlService --> MotorStatus
+		MotorStatus --> MotorState
+
+		object "MotorControlService" as MotorMgmtProvidesMotorControlService <<Provision>> {
+			name = "MotorControl"
+			interfaceType = MotorControlService.class
+			description = "Provides PID-based motor speed and position control"
+		}
+		MotorMgmtProvidesMotorControlService ..> MotorControlService : interfaceType
+	}
+	rectangle "Protocols" {
+		object "SensorInteraction" as MotorMgmtProtocolSensorInteraction <<Protocol>> {
+			name = "SensorInteraction"
+			mechanism = CommunicationMechanism.INTERRUPT_DRIVEN
+			dataFormat = DataFormat.BINARY
+		}
+		json "qualityAttributes" as MotorMgmtProtocolSensorInteractionQualityAttributes {
+			"maxLatency": "5us",
+			"callFrequency": "1kHz",
+			"reliability": "guaranteed",
+			"interruptPriority": "high",
+			"memoryAccess": "direct"
+		}
+		MotorMgmtProtocolSensorInteraction *--> MotorMgmtProtocolSensorInteractionQualityAttributes
+
+		object "ActuatorInteraction" as MotorMgmtProtocolActuatorInteraction <<Protocol>> {
+			name = "ActuatorInteraction"
+			mechanism = CommunicationMechanism.DIRECT_CALL
+			dataFormat = DataFormat.BINARY
+		}
+		json "qualityAttributes" as MotorMgmtProtocolActuatorInteractionQualityAttributes {
+			"maxLatency": "10us",
+			"callFrequency": "1kHz",
+			"reliability": "guaranteed",
+			"safetyLevel": "critical"
+		}
+		MotorMgmtProtocolActuatorInteraction *--> MotorMgmtProtocolActuatorInteractionQualityAttributes
+
+		object "DiagnosticInteraction" as MotorMgmtProtocolDiagnosticInteraction <<Protocol>> {
+			name = "DiagnosticInteraction"
+			mechanism = CommunicationMechanism.ASYNC_MESSAGE
+			dataFormat = DataFormat.JSON
+		}
+		json "qualityAttributes" as MotorMgmtProtocolDiagnosticInteractionQualityAttributes {
+			"maxLatency": "100ms",
+			"callFrequency": "10Hz",
+			"reliability": "best-effort",
+			"bufferSize": "1000"
+		}
+		MotorMgmtProtocolDiagnosticInteraction *--> MotorMgmtProtocolDiagnosticInteractionQualityAttributes
+	}
+	rectangle "Required contracts" as MotorMgmtRequirementsPkg {
+		interface "SensorService" as MotorMgmtRequirementSensorService {
+			EncoderReading getEncoderPosition()
+			TemperatureReading getTemperature()
+			void calibrateSensors()
+		}
+		struct EncoderReading <<Record>> {
+			int position
+			int velocity
+			long timestamp
+		}
+		struct TemperatureReading <<Record>> {
+			double temperatureCelsius
+			SensorQuality quality
+			long timestamp
+		}
+		enum SensorQuality {
+			GOOD
+			DEGRADED
+			FAULT
+		}
+		MotorMgmtRequirementSensorService ..> TemperatureReading
+		MotorMgmtRequirementSensorService ..> EncoderReading
+		TemperatureReading ..> SensorQuality
+
+		object "SensorService" as MotorMgmtRequiresSensorService <<Requirement>> {
+			name = "SensorService"
+			interfaceType = SensorService.class
+			optional = false // NOT optional - required for operation
+			description = "Required for encoder position and temperature readings"
+		}
+		MotorMgmtRequiresSensorService ..> MotorMgmtRequirementSensorService : interfaceType
+
+		interface "ActuatorService" as MotorMgmtRequirementActuatorService {
+			void setPWMDutyCycle(double dutyCycle);
+			void enableOutput(boolean enable);
+			ActuatorStatus getStatus();
+			void performSafetyCheck();
+		}
+		struct ActuatorStatus <<Record>> {
+			boolean outputEnabled,
+			double currentDutyCycle,
+			boolean faultDetected,
+			SafetyState safetyState
+		}
+		enum SafetyState {
+			SAFE
+			WARNING
+			EMERGENCY_STOP
+		}
+		MotorMgmtRequirementActuatorService ..> ActuatorStatus
+		ActuatorStatus ..> SafetyState
+
+		object "ActuatorService" as MotorMgmtRequiresActuatorService <<Requirement>> {
+			name = "ActuatorService"
+			interfaceType = ActuatorService.class
+			optional = false // NOT optional - required for operation
+			description = "Required for motor output control and safety checks"
+		}
+		MotorMgmtRequiresActuatorService ..> MotorMgmtRequirementActuatorService : interfaceType
+
+		interface "DiagnosticService" as MotorMgmtRequirementDiagnosticService  {
+			void logEvent(String eventType, String message, Severity severity)
+			void logMetric(String metricName, double value)
+		}
+		enum Severity {
+			INFO
+			WARNING
+			ERROR
+			CRITICAL
+		}
+		MotorMgmtRequirementDiagnosticService ..> Severity
+
+		object "DiagnosticService" as MotorMgmtRequiresDiagnosticService <<Requirement>> {
+			name = "DiagnosticService"
+			interfaceType = DiagnosticService.class
+			optional = true // OPTIONAL - system can operate without logging
+			description = "Optional diagnostic logging for monitoring and troubleshooting"
+		}
+		MotorMgmtRequiresDiagnosticService ..> MotorMgmtRequirementDiagnosticService : interfaceType
+	}
+	MotorControlContract *--> MotorMgmtProvidesMotorControlService : provisions
+	MotorControlContract *--> MotorMgmtRequiresSensorService : requires
+	MotorControlContract *--> MotorMgmtProtocolSensorInteraction : protocol
+	MotorControlContract *--> MotorMgmtRequiresActuatorService : requires
+	MotorControlContract *--> MotorMgmtProtocolActuatorInteraction : protocol
+	MotorControlContract *--> MotorMgmtRequiresDiagnosticService : requires
+	MotorControlContract *--> MotorMgmtProtocolDiagnosticInteraction : protocol
+
+	rectangle "Nucleus" as NucleusPkg {
+		rectangle "Adaptation Layer" as AdaptationLayer {
+			note as noteAdaptationLayer
+				Implements the interfaces through which other
+				capabilities interact with this capability:
+				* REST endpoints
+				* GraphQL interfaces
+				* Message bus subscribers/publishers
+				* Event publishers/listeners
+			end note
+
+			rectangle "Realization Layer" as RealizationLayer {
+				note as noteRealizationLayer
+					Implements the access to any external infrastructure
+					necessary to support the domain logic of the essence:
+					* Hardware integration
+					* Database access
+					* Message queue integration
+					* API implementations - which direction?
+				end note
+
+				rectangle "Essence" as EssenceLayer {
+					note as noteEssence
+						* Pure domain logic
+						* Algorithms & rules
+						* No outward dependencies:
+						** completely self-contained
+						** no calls to external systems
+						** no hardware access
+						* 100 % testable
+					end note
+
+					class PIDController {
+						+PIDController(double kp, double ki, double kd, double integralLimit)
+						+double calculate(double current, double target, double deltaTime)
+						+void reset()
+						+void setGains(double kp, double ki, double kd)
+						+PIDGains getGains()
+					}
+					struct PIDGains <<Record>> {
+						double kp
+						double ki
+						double kd
+					}
+					class MotorStateEstimator {
+						+MotorStateEstimator()
+						+double estimateSpeed(int currentPosition, double deltaTime)
+						+void reset()
+					}
+					PIDController ..> PIDGains
+				}
+
+				class MotorControlRealization {
+					+MotorControlRealization(HardwareRegisters, InterruptHandler, RTOSTimer)
+					-- ESSENCE COMPONENTS: Pure domain logic --
+					-PIDController pidController;
+					-MotorStateEstimator stateEstimator;
+					-- CONTRACT REQUIREMENTS: Services from other capabilities --
+					-SensorService sensorService;			// Injected by CapabilityLifecycleManager
+					-ActuatorService actuatorService;		// Injected by CapabilityLifecycleManager
+					-DiagnosticService diagnosticService;	// Optional, may be null
+					--
+					+void initializeHardware()
+					-void controlLoopInterrupt()
+					+void calibrateSensors()
+					+void loadConfigurationFromFile(String filePath)
+					+CompletableFuture<Void> updateConfigurationFromServer(String serverUrl)
+					+void updateConfiguration(String configJson)
+					-- Partial implementation of MotorControlService --
+					+void setTargetSpeed(double speedRPM)
+					+MotorStatus getCurrentStatus()
+					+void emergencyStop()
+					-- LifecycleManager dependency injection --
+					+void injectSensorService(SensorService sensorService)
+					+void injectActuatorService(ActuatorService actuatorService)
+					+void injectDiagnosticService(DiagnosticService diagnosticService)
+					--
+					-void logDiagnostic(String severity, String message)
+				}
+				MotorControlRealization *--> PIDController
+				MotorControlRealization *--> MotorStateEstimator
+			} /' Realization Layer '/
+
+			class MotorControlAdapter {
+				+MotorControlAdapter(MotorControlRealization)
+				-- Implementation of MotorControlService --
+				+void setTargetSpeed(double speedRPM)
+				+void setTargetPosition(double positionDegrees)
+				+MotorStatus getCurrentStatus()
+				+void emergencyStop()
+			}
+		} /' Adaptation Layer '/
+
+		class MotorControlCapability {
+			+MotorControlCapability(HardwareRegisters, InterruptHandler, RTOSTimer)
+			' -- ESSENCE: Pure domain logic --
+			' -PIDController pidController
+			' -MotorStateEstimator stateEstimator
+			-- REALIZATION: Infrastructure integration --
+			-MotorControlRealization realization
+			-- ADAPTATION: External interface --
+			-MotorControlAdapter adapter
+			-- CONTRACT: Formal interface agreement --
+			-MotorControlContract contract
+			-- LIFECYCLE MANAGEMENT METHODS --
+			+void initialize()
+			+void start()
+			+void stop()
+			+void cleanup()
+			-- LIFECYCLE MANAGEMENT DEPENDENCY INJECTION --
+			+void injectDependency(Class<?> contractType, Object implementation)
+			+Object getContractImplementation(Class<?> contractType)
+			-- CONTRACT ACCESS --
+			MotorControlContract getContract()
+		}
+		MotorControlCapability <|.. CapabilityInstance
+	} /' Nucleus '/
+
+	MotorMgmtProvisionsPkg .[hidden]..> NucleusPkg
+	MotorMgmtRequirementsPkg .[hidden]..> NucleusPkg
+
+	MotorControlRealization ..> MotorStatus
+	MotorControlRealization ..> MotorMgmtRequirementSensorService : use
+	MotorControlRealization ..> MotorMgmtRequirementActuatorService : use
+	MotorControlRealization ..> MotorMgmtRequirementDiagnosticService : use
+
+	MotorControlService <|.. MotorControlAdapter
+	MotorStatus <.. MotorControlAdapter
+	MotorControlAdapter ..> MotorControlRealization : use
+
+	MotorControlContract <--* MotorControlCapability
+	MotorControlCapability *--> MotorControlAdapter : adapter
+	MotorControlCapability *--> MotorControlRealization : realization
+}
+
+rectangle "Sensor Management Capability" as SensorManagementCapabilityPkg {
+	note as SensorManagementCapabilityNote
+		Reads encoder positions to determine motor shaft rotation,
+		monitors temperature sensors to prevent overheating and
+		provides filtered sensor data to other capabilities
+	end note
+
+	class SensorManagementContract {
+		+{static} SensorManagementContract create()
+	}
+	CapabilityContract <|-- SensorManagementContract
+
+	rectangle "Provided contracts" {
+		interface SensorService {
+			EncoderReading getEncoderPosition();
+			TemperatureReading getTemperature();
+			void calibrateSensors();
+		}
+		struct EncoderReading <<Record>> {
+			int position,
+			int velocity,
+			long timestamp
+		}
+		struct TemperatureReading <<Record>> {
+			double temperatureCelsius,
+			SensorQuality quality,
+			long timestamp
+		}
+		enum SensorQuality {
+			GOOD
+			DEGRADED
+			FAULT
+		}
+		SensorService ..> TemperatureReading
+		SensorService ..> EncoderReading
+		TemperatureReading ..> SensorQuality
+
+		object "SensorService" as SensorMgmtProvidesSensorService <<Provision>> {
+			name = "SensorService"
+			interfaceType = SensorService.class
+			description = "Provides calibrated encoder and temperature sensor readings"
+		}
+		SensorMgmtProvidesSensorService ..> SensorService : interfaceType
+	}
+	rectangle "Protocols" {
+		object "SensorDataProvision" as SensorMgmtProtocolSensorDataProvision <<Protocol>> {
+			name = "SensorDataProvision"
+			mechanism = CommunicationMechanism.INTERRUPT_DRIVEN
+			dataFormat = DataFormat.BINARY
+		}
+		json "qualityAttributes" as SensorMgmtProtocolSensorDataProvisionQualityAttributes {
+			"maxLatency": "5us",
+			"updateRate": "1kHz",
+			"reliability": "guaranteed",
+			"dataFreshness": "real-time"
+		}
+		SensorMgmtProtocolSensorDataProvision *--> SensorMgmtProtocolSensorDataProvisionQualityAttributes
+
+		object "DiagnosticReporting" as SensorMgmtProtocolDiagnosticReporting <<Protocol>> {
+			name = "DiagnosticReporting"
+			mechanism = CommunicationMechanism.ASYNC_MESSAGE
+			dataFormat = DataFormat.JSON
+		}
+		json "qualityAttributes" as SensorMgmtProtocolDiagnosticReportingQualityAttributes {
+			"maxLatency": "100ms",
+			"reliability": "best-effort"
+		}
+		SensorMgmtProtocolDiagnosticReporting *--> SensorMgmtProtocolDiagnosticReportingQualityAttributes
+	}
+	rectangle "Required contracts" {
+		interface "DiagnosticService" as SensorMgmtRequirementDiagnosticService  {
+			void logEvent(String eventType, String message, Severity severity)
+			void logMetric(String metricName, double value)
+		}
+		enum Severity {
+			INFO
+			WARNING
+			ERROR
+			CRITICAL
+		}
+		SensorMgmtRequirementDiagnosticService ..> Severity
+
+		object "DiagnosticService" as SensorMgmtRequiresDiagnosticService <<Requirement>> {
+			name = "DiagnosticService"
+			interfaceType = DiagnosticService.class
+			optional = true // OPTIONAL
+			description = "Optional logging for sensor calibration and fault events"
+		}
+		SensorMgmtRequiresDiagnosticService ..> SensorMgmtRequirementDiagnosticService : interfaceType
+	}
+	SensorManagementContract *--> SensorMgmtProvidesSensorService : provides
+	SensorManagementContract *--> SensorMgmtProtocolSensorDataProvision : protocol
+	SensorManagementContract *--> SensorMgmtProtocolDiagnosticReporting : protocol
+	SensorManagementContract *--> SensorMgmtRequiresDiagnosticService : requires
+}
+
+rectangle "Actuator Management Capability" as ActuatorMgmtCapabilityPkg {
+	note as ActuatorManagementCapabilityNote
+		manages Pulse Width Modulation signals,
+		handles emergency stop conditions and
+		ensures safe operation through hardware interlocks.
+	end note
+
+	class ActuatorManagementContract {
+		+{static} ActuatorManagementContract create()
+	}
+	CapabilityContract <|-- ActuatorManagementContract
+
+	rectangle "Provided contracts" {
+		interface ActuatorService {
+			void setPWMDutyCycle(double dutyCycle);
+			void enableOutput(boolean enable);
+			ActuatorStatus getStatus();
+			void performSafetyCheck();
+		}
+		struct ActuatorStatus <<Record>> {
+			boolean outputEnabled,
+			double currentDutyCycle,
+			boolean faultDetected,
+			SafetyState safetyState
+		}
+		enum SafetyState {
+			SAFE
+			WARNING
+			EMERGENCY_STOP
+		}
+		ActuatorService ..> ActuatorStatus
+		ActuatorStatus ..> SafetyState
+
+		object "ActuatorService" as ActuatorMgmtProvidesActuatorService <<Provision>> {
+			name = "ActuatorService"
+			interfaceType = ActuatorService.class
+			description = "Provides safe PWM control and hardware interlock management"
+		}
+		ActuatorMgmtProvidesActuatorService ..> ActuatorService : interfaceType
+	}
+	rectangle "Protocols" {
+		object "ActuatorControl" as ActuatorMgmtProtocolActuatorControl <<Protocol>> {
+			name = "ActuatorControl"
+			mechanism = CommunicationMechanism.DIRECT_CALL
+			dataFormat = DataFormat.BINARY
+		}
+		json "qualityAttributes" as ActuatorMgmtProtocolActuatorControlQualityAttributes {
+			"maxLatency": "10us",
+			"reliability": "guaranteed",
+			"safetyLevel": "critical",
+			"failureMode": "fail-safe"
+		}
+		ActuatorMgmtProtocolActuatorControl *--> ActuatorMgmtProtocolActuatorControlQualityAttributes
+
+		object "SafetyMonitoring" as ActuatorMgmtProtocolSafetyMonitoring <<Protocol>> {
+			name = "SafetyMonitoring"
+			mechanism = CommunicationMechanism.ASYNC_MESSAGE
+			dataFormat = DataFormat.JSON
+		}
+		json "qualityAttributes" as ActuatorMgmtProtocolSafetyMonitoringQualityAttributes {
+			"maxLatency": "50ms",
+			"reliability": "at-least-once"
+		}
+		ActuatorMgmtProtocolSafetyMonitoring *--> ActuatorMgmtProtocolSafetyMonitoringQualityAttributes
+	}
+	rectangle "Required contracts" {
+		interface "DiagnosticService" as ActuatorMgmtRequirementDiagnosticService  {
+			void logEvent(String eventType, String message, Severity severity)
+			void logMetric(String metricName, double value)
+		}
+		enum Severity {
+			INFO
+			WARNING
+			ERROR
+			CRITICAL
+		}
+		ActuatorMgmtRequirementDiagnosticService ..> Severity
+
+		object "DiagnosticService" as ActuatorMgmtRequiresDiagnosticService <<Requirement>> {
+			name = "DiagnosticService"
+			interfaceType = DiagnosticService.class
+			optional = true // OPTIONAL
+			description = "Optional logging for safety events and fault conditions"
+		}
+		ActuatorMgmtRequiresDiagnosticService ..> ActuatorMgmtRequirementDiagnosticService : interfaceType
+	}
+	ActuatorManagementContract *--> ActuatorMgmtProvidesActuatorService : provides
+	ActuatorManagementContract *--> ActuatorMgmtProtocolActuatorControl : protocol
+	ActuatorManagementContract *--> ActuatorMgmtProtocolSafetyMonitoring : protocol
+	ActuatorManagementContract *--> ActuatorMgmtRequiresDiagnosticService : requires
+}
+
+rectangle "Diagnostic Logging Capability" as DiagnosticLoggingCapabilityPkg {
+	note as DiagnosticLoggingCapabilityNote
+		provides system monitoring
+		and troubleshooting support.
+	end note
+
+	class DiagnosticLoggingContract {
+		+{static} DiagnosticLoggingContract create()
+	}
+	CapabilityContract <|-- DiagnosticLoggingContract
+
+	rectangle "Provided contracts" {
+		interface "DiagnosticService" as DiagnosticLoggingProvisionDiagnosticService {
+			void logEvent(String eventType, String message, Severity severity)
+			void logMetric(String metricName, double value)
+			void queryLogs(String filter, int maxResults)
+		}
+		enum Severity {
+			INFO
+			WARNING
+			ERROR
+			CRITICAL
+		}
+		DiagnosticLoggingProvisionDiagnosticService ..> Severity
+
+		object "DiagnosticService" as DiagnosticLoggingProvidesDiagnosticService <<Provision>> {
+			name = "DiagnosticService"
+			interfaceType = DiagnosticService.class
+			description = "Provides event logging, metric collection, and log querying"
+		}
+		DiagnosticLoggingProvidesDiagnosticService ..> DiagnosticLoggingProvisionDiagnosticService : interfacType
+	}
+	rectangle "Protocols" {
+		object "LogIngestion" as DiagnosticLoggingProtocolLogIngestion <<Protocol>> {
+			name = "LogIngestion"
+			mechanism = CommunicationMechanism.ASYNC_MESSAGE
+			dataFormat = DataFormat.JSON
+		}
+		json "qualityAttributes" as DiagnosticLoggingProtocolLogIngestionQualityAttributes {
+			"maxLatency": "100ms",
+			"reliability": "best-effort",
+			"bufferSize": "10000",
+			"overflowPolicy": "drop-oldest"
+		}
+		DiagnosticLoggingProtocolLogIngestion *--> DiagnosticLoggingProtocolLogIngestionQualityAttributes
+
+		object "LogQuery" as DiagnosticLoggingProtocolLogQuery <<Protocol>> {
+			name = "LogQuery"
+			mechanism = CommunicationMechanism.DIRECT_CALL
+			dataFormat = DataFormat.JSON
+		}
+		json "qualityAttributes" as DiagnosticLoggingProtocolLogQueryQualityAttributes {
+			"maxLatency": "500ms",
+			"reliability": "guaranteed",
+			"cacheEnabled": "true"
+		}
+		DiagnosticLoggingProtocolLogQuery *--> DiagnosticLoggingProtocolLogQueryQualityAttributes
+	}
+	DiagnosticLoggingContract *--> DiagnosticLoggingProvidesDiagnosticService : provides
+	DiagnosticLoggingContract *--> DiagnosticLoggingProtocolLogQuery : protocol
+	DiagnosticLoggingContract *--> DiagnosticLoggingProtocolLogIngestion : protocol
+
+	rectangle "Nucleus" as NucleusPkg {
+		class DiagnosticLoggingCapability {
+			+DiagnosticLoggingCapability()
+			---
+			-BlockingQueue<LogEntry> logQueue;
+			-ExecutorService logWriter;
+			-FileWriter logFile;
+			-- CONTRACT: Formal interface agreement --
+			-DiagnosticLoggingContract contract
+			--
+			+void logEvent(String eventType, String message, Severity severity)
+			-void processLogQueue()
+			-- LIFECYCLE MANAGEMENT METHODS --
+			+void initialize()
+			+void start()
+			+void stop()
+			+void cleanup()
+			-- LIFECYCLE MANAGEMENT DEPENDENCY INJECTION --
+			+void injectDependency(Class<?> contractType, Object implementation)
+			+Object getContractImplementation(Class<?> contractType)
+			-- CONTRACT ACCESS --
+			+DiagnosticLoggingContract getContract()
+		}
+		DiagnosticLoggingCapability <|.. CapabilityInstance
+		DiagnosticLoggingCapability *--> DiagnosticLoggingContract
+	} /' Nucleus '/
+}
+
+@enduml
