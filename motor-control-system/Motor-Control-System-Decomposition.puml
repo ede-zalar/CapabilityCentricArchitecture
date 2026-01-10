@@ -1,4 +1,4 @@
-@startuml CCA-v0.2-Motor-Control-System-Decomposition
+@startuml Motor-Control-System-Decomposition-CCA-v0.2
 ' !pragma layout smetana
 
 title Motor control system - Overview
