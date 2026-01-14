@@ -1,4 +1,5 @@
 {
 	"plantuml.exportOutDir": ".",
-	"plantuml.exportIncludeFolderHeirarchy": true
+	"plantuml.exportIncludeFolderHeirarchy": true,
+	"plantuml.exportFormat": "png"
 }
