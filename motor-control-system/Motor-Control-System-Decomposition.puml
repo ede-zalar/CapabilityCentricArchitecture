@@ -278,11 +278,13 @@ rectangle "Motor Control Capability" as MotorControlCapabilityPkg {
 		MotorMgmtRequiresDiagnosticService ..> MotorMgmtRequirementDiagnosticService : interfaceType
 	}
 	MotorControlContract *--> MotorMgmtProvidesMotorControlService : provisions
+
 	MotorControlContract *--> MotorMgmtRequiresSensorService : requires
-	MotorControlContract *--> MotorMgmtProtocolSensorInteraction : protocol
 	MotorControlContract *--> MotorMgmtRequiresActuatorService : requires
-	MotorControlContract *--> MotorMgmtProtocolActuatorInteraction : protocol
 	MotorControlContract *--> MotorMgmtRequiresDiagnosticService : requires
+
+	MotorControlContract *--> MotorMgmtProtocolSensorInteraction : protocol
+	MotorControlContract *--> MotorMgmtProtocolActuatorInteraction : protocol
 	MotorControlContract *--> MotorMgmtProtocolDiagnosticInteraction : protocol
 
 	rectangle "Nucleus" as NucleusPkg {
@@ -406,16 +408,16 @@ rectangle "Motor Control Capability" as MotorControlCapabilityPkg {
 	MotorMgmtProvisionsPkg .[hidden]..> NucleusPkg
 	MotorMgmtRequirementsPkg .[hidden]..> NucleusPkg
 
+	MotorControlAdapter ..|> MotorControlService
+	MotorControlAdapter ..> MotorStatus
+	MotorControlAdapter ..> MotorControlRealization : use
+
 	MotorControlRealization ..> MotorStatus
 	MotorControlRealization ..> MotorMgmtRequirementSensorService : use
 	MotorControlRealization ..> MotorMgmtRequirementActuatorService : use
 	MotorControlRealization ..> MotorMgmtRequirementDiagnosticService : use
 
-	MotorControlService <|.. MotorControlAdapter
-	MotorStatus <.. MotorControlAdapter
-	MotorControlAdapter ..> MotorControlRealization : use
-
-	MotorControlContract <--* MotorControlCapability
+	MotorControlCapability *--> MotorControlContract
 	MotorControlCapability *--> MotorControlAdapter : adapter
 	MotorControlCapability *--> MotorControlRealization : realization
 }
@@ -569,19 +571,8 @@ rectangle "Actuator Management Capability" as ActuatorMgmtCapabilityPkg {
 			"failureMode": "fail-safe"
 		}
 		ActuatorMgmtProtocolActuatorControl *--> ActuatorMgmtProtocolActuatorControlQualityAttributes
-
-		object "SafetyMonitoring" as ActuatorMgmtProtocolSafetyMonitoring <<Protocol>> {
-			name = "SafetyMonitoring"
-			mechanism = CommunicationMechanism.ASYNC_MESSAGE
-			dataFormat = DataFormat.JSON
-		}
-		json "qualityAttributes" as ActuatorMgmtProtocolSafetyMonitoringQualityAttributes {
-			"maxLatency": "50ms",
-			"reliability": "at-least-once"
-		}
-		ActuatorMgmtProtocolSafetyMonitoring *--> ActuatorMgmtProtocolSafetyMonitoringQualityAttributes
 	}
-	rectangle "Required contracts" {
+	rectangle "Required contracts and protocols" {
 		interface "DiagnosticService" as ActuatorMgmtRequirementDiagnosticService  {
 			void logEvent(String eventType, String message, Severity severity)
 			void logMetric(String metricName, double value)
@@ -601,6 +592,17 @@ rectangle "Actuator Management Capability" as ActuatorMgmtCapabilityPkg {
 			description = "Optional logging for safety events and fault conditions"
 		}
 		ActuatorMgmtRequiresDiagnosticService ..> ActuatorMgmtRequirementDiagnosticService : interfaceType
+
+		object "SafetyMonitoring" as ActuatorMgmtProtocolSafetyMonitoring <<Protocol>> {
+			name = "SafetyMonitoring"
+			mechanism = CommunicationMechanism.ASYNC_MESSAGE
+			dataFormat = DataFormat.JSON
+		}
+		json "qualityAttributes" as ActuatorMgmtProtocolSafetyMonitoringQualityAttributes {
+			"maxLatency": "50ms",
+			"reliability": "at-least-once"
+		}
+		ActuatorMgmtProtocolSafetyMonitoring *--> ActuatorMgmtProtocolSafetyMonitoringQualityAttributes
 	}
 	ActuatorManagementContract *--> ActuatorMgmtProvidesActuatorService : provides
 	ActuatorManagementContract *--> ActuatorMgmtProtocolActuatorControl : protocol
@@ -619,7 +621,7 @@ rectangle "Diagnostic Logging Capability" as DiagnosticLoggingCapabilityPkg {
 	}
 	CapabilityContract <|-- DiagnosticLoggingContract
 
-	rectangle "Provided contracts" {
+	rectangle "Provided contracts and protocols" {
 		interface "DiagnosticService" as DiagnosticLoggingProvisionDiagnosticService {
 			void logEvent(String eventType, String message, Severity severity)
 			void logMetric(String metricName, double value)
@@ -639,8 +641,7 @@ rectangle "Diagnostic Logging Capability" as DiagnosticLoggingCapabilityPkg {
 			description = "Provides event logging, metric collection, and log querying"
 		}
 		DiagnosticLoggingProvidesDiagnosticService ..> DiagnosticLoggingProvisionDiagnosticService : interfacType
-	}
-	rectangle "Protocols" {
+
 		object "LogIngestion" as DiagnosticLoggingProtocolLogIngestion <<Protocol>> {
 			name = "LogIngestion"
 			mechanism = CommunicationMechanism.ASYNC_MESSAGE
@@ -697,5 +698,18 @@ rectangle "Diagnostic Logging Capability" as DiagnosticLoggingCapabilityPkg {
 		DiagnosticLoggingCapability *--> DiagnosticLoggingContract
 	} /' Nucleus '/
 }
+
+MotorMgmtRequiresDiagnosticService ..> DiagnosticLoggingProvidesDiagnosticService
+
+SensorMgmtRequirementDiagnosticService ..> DiagnosticLoggingProvidesDiagnosticService
+SensorMgmtProtocolDiagnosticReporting ..> DiagnosticLoggingProtocolLogIngestion
+
+ActuatorMgmtRequirementDiagnosticService ..> DiagnosticLoggingProvidesDiagnosticService
+ActuatorMgmtProtocolSafetyMonitoring ..> DiagnosticLoggingProtocolLogIngestion
+
+' Hidden dependencies help for layout
+MotorMgmtProvisionsPkg .[hidden].....> DiagnosticLoggingCapabilityPkg
+SensorManagementCapabilityPkg .[hidden].....> DiagnosticLoggingCapabilityPkg
+ActuatorMgmtCapabilityPkg .[hidden].....> DiagnosticLoggingCapabilityPkg
 
 @enduml
