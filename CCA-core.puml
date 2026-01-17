@@ -1,113 +1,118 @@
-@startuml Core Elements of CCA v0.2
+@startuml cca-core-elements-v0.2
 
-' Provision - Represents an interface provided by a capability
-struct Provision <<Record>> {
-	String name
-	Class<?> interfaceType
-	String description
-}
-' Requirement - Represents an interface required by a capability
-struct Requirement <<Record>> {
-	String name
-	Class<?> interfaceType
-	boolean optional
-	String description
-}
-' Protocol - Describes how interaction occurs
-struct Protocol <<Record>> {
-	String name
-	CommunicationMechanism mechanism
-	DataFormat dataFormat
-	Map<String, String> qualityAttributes
-}
-enum CommunicationMechanism {
-	DIRECT_CALL 	// In-process, synchronous
-	ASYNC_MESSAGE	// Asynchronous messaging
-	SHARED_MEMORY	// Direct memory access
-	INTERRUPT_DRIVEN // Hardware interrupt
-}
-enum DataFormat {
-	BINARY
-	JSON
-	PROTOBUF
-	RAW_MEMORY
-}
-abstract class CapabilityContract {
-	#List<Provision> provisions
-	#List<Requirement> requirements
-	#List<Protocol> protocols
-	+List<Provision> getProvisions()
-	+List<Requirement> getRequirements()
-	+List<Protocol> getProtocols()
-}
-CommunicationMechanism <.. Protocol
-DataFormat <.. Protocol
-Provision <.. CapabilityContract : use
-Requirement <.. CapabilityContract : use
-Protocol <.. CapabilityContract : use
-
-enum LifecycleState {
-	NOT_CREATED
-	CREATED
-	INITIALIZED
-	DEPENDENCIES_INJECTED
-	STARTED
-	STOPPED
-	CLEANED_UP
+rectangle "Capability Contract" {
+	abstract class CapabilityContract {
+		#List<Provision> provisions
+		#List<Requirement> requirements
+		#List<Protocol> protocols
+		+List<Provision> getProvisions()
+		+List<Requirement> getRequirements()
+		+List<Protocol> getProtocols()
+	}
+	' Provision - Represents an interface provided by a capability
+	struct Provision <<Record>> {
+		String name
+		Class<?> interfaceType
+		String description
+	}
+	' Requirement - Represents an interface required by a capability
+	struct Requirement <<Record>> {
+		String name
+		Class<?> interfaceType
+		boolean optional
+		String description
+	}
+	' Protocol - Describes how interaction occurs
+	struct Protocol <<Record>> {
+		String name
+		CommunicationMechanism mechanism
+		DataFormat dataFormat
+		Map<String, String> qualityAttributes
+	}
+	enum CommunicationMechanism {
+		DIRECT_CALL 	// In-process, synchronous
+		ASYNC_MESSAGE	// Asynchronous messaging
+		SHARED_MEMORY	// Direct memory access
+		INTERRUPT_DRIVEN // Hardware interrupt
+	}
+	enum DataFormat {
+		BINARY
+		JSON
+		PROTOBUF
+		RAW_MEMORY
+	}
+	' Relations of contract elements
+	CapabilityContract *--> Provision
+	CapabilityContract *--> Requirement
+	CapabilityContract *-right-> Protocol
+	Protocol ..> CommunicationMechanism
+	Protocol ..> DataFormat
 }
 
-interface CapabilityInstance {
-	void initialize()
-	void start()
-	void stop()
-	void cleanup()
-	Object getContractImplementation(Class<?> contractType)
-	void injectDependency(Class<?> contractType, Object implementation)
+rectangle "Capability Lifecycle Management" {
+	enum LifecycleState {
+		NOT_CREATED
+		CREATED
+		INITIALIZED
+		DEPENDENCIES_INJECTED
+		STARTED
+		STOPPED
+		CLEANED_UP
+	}
+
+	interface CapabilityInstance {
+		void initialize()
+		void start()
+		void stop()
+		void cleanup()
+		Object getContractImplementation(Class<?> contractType)
+		void injectDependency(Class<?> contractType, Object implementation)
+	}
+	class CapabilityRegistry {
+		-Map<String, CapabilityDescriptor> descriptors
+		-Map<String, CapabilityInstance> instances
+		-Map<Class<?>, String> provisionToCapabilityMap
+		-DirectedGraph<String> dependencyGraph
+		+public CapabilityRegistry()
+		+void registerCapability(CapabilityDescriptor descriptor)
+		+void registerInstance(String capabilityId, CapabilityInstance instance)
+		+void buildDependencyGraph()
+		+List<String> getInitializationOrder()
+		+CapabilityInstance getInstance(String capabilityId)
+		+CapabilityDescriptor getDescriptor(String capabilityId)
+		+String findProvider(Class<?> contractType)
+		+Set<String> getAllCapabilityIds()
+	}
+	class CapabilityFactory {
+		-Map<String, Object> constructorParameters
+		+CapabilityFactory()
+		+void registerParameters(String capabilityType, Object... params)
+		+CapabilityInstance createInstance(CapabilityDescriptor descriptor)
+		-CapabilityInstance createWithParameters(Class<? extends CapabilityInstance> clazz, Object[] params)
+	}
+	class CapabilityLifecycleManager {
+		-CapabilityRegistry registry
+		-CapabilityFactory factory
+		-Map<String, LifecycleState> stateMap
+		+CapabilityLifecycleManager(CapabilityRegistry registry, CapabilityFactory factory)
+		+void initializeAll()
+		-void initializeCapability(String capabilityId)
+		+void injectDependencies()
+		-void injectDependenciesForCapability(String capabilityId)
+		+void startAll()
+		-void startCapability(String capabilityId)
+		+void stopAll()
+		-void stopCapability(String capabilityId)
+		+void cleanupAll()
+		-void cleanupCapability(String capabilityId)
+		+LifecycleState getState(String capabilityId)
+		+void startSystem()
+		+void shutdownSystem()
+	}
+	LifecycleState <.. CapabilityLifecycleManager
+	CapabilityLifecycleManager .right.> CapabilityRegistry
+	CapabilityLifecycleManager ..> CapabilityFactory
+	CapabilityLifecycleManager ..> CapabilityInstance
 }
-class CapabilityRegistry {
-	-Map<String, CapabilityDescriptor> descriptors
-	-Map<String, CapabilityInstance> instances
-	-Map<Class<?>, String> provisionToCapabilityMap
-	-DirectedGraph<String> dependencyGraph
-	+public CapabilityRegistry()
-	+void registerCapability(CapabilityDescriptor descriptor)
-	+void registerInstance(String capabilityId, CapabilityInstance instance)
-	+void buildDependencyGraph()
-	+List<String> getInitializationOrder()
-	+CapabilityInstance getInstance(String capabilityId)
-	+CapabilityDescriptor getDescriptor(String capabilityId)
-	+String findProvider(Class<?> contractType)
-	+Set<String> getAllCapabilityIds()
-}
-class CapabilityFactory {
-	-Map<String, Object> constructorParameters
-	+CapabilityFactory()
-	+void registerParameters(String capabilityType, Object... params)
-	+CapabilityInstance createInstance(CapabilityDescriptor descriptor)
-	-CapabilityInstance createWithParameters(Class<? extends CapabilityInstance> clazz, Object[] params)
-}
-class CapabilityLifecycleManager {
-	-CapabilityRegistry registry
-	-CapabilityFactory factory
-	-Map<String, LifecycleState> stateMap
-	+CapabilityLifecycleManager(CapabilityRegistry registry, CapabilityFactory factory)
-	+void initializeAll()
-	-void initializeCapability(String capabilityId)
-	+void injectDependencies()
-	-void injectDependenciesForCapability(String capabilityId)
-	+void startAll()
-	-void startCapability(String capabilityId)
-	+void stopAll()
-	-void stopCapability(String capabilityId)
-	+void cleanupAll()
-	-void cleanupCapability(String capabilityId)
-	+LifecycleState getState(String capabilityId)
-	+void startSystem()
-	+void shutdownSystem()
-}
-LifecycleState <.. CapabilityLifecycleManager
-CapabilityRegistry <.. CapabilityLifecycleManager
-CapabilityFactory <.. CapabilityLifecycleManager
-CapabilityLifecycleManager ..> CapabilityInstance
 
 @enduml
