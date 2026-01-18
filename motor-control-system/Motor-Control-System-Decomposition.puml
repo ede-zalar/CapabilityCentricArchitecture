@@ -1,11 +1,11 @@
 @startuml Motor-Control-System-Decomposition-CCA-v0.2
 ' !pragma layout smetana
+set separator ::
 
 title Motor control system - Overview
 
-rectangle "Core definitions" as CCACorePkg {
-	!include ./../CCA-core.puml
-}
+!include ./../Core/CCA-Contracts.def.iuml
+remove CapabilityNucleusPkg::CapabilityAdaptationLayer::CapabilityContractImpl
 
 rectangle "Motor Control Capability" as MotorControlCapabilityPkg {
 	note as MotorControlCapabilityNote
@@ -181,87 +181,6 @@ rectangle "Motor Control Capability" as MotorControlCapabilityPkg {
 
 	rectangle "Nucleus" as NucleusPkg {
 		rectangle "Adaptation Layer" as AdaptationLayer {
-			note as noteAdaptationLayer
-				Implements the interfaces through which other
-				capabilities interact with this capability:
-				* REST endpoints
-				* GraphQL interfaces
-				* Message bus subscribers/publishers
-				* Event publishers/listeners
-			end note
-
-			rectangle "Realization Layer" as RealizationLayer {
-				note as noteRealizationLayer
-					Implements the access to any external infrastructure
-					necessary to support the domain logic of the essence:
-					* Hardware integration
-					* Database access
-					* Message queue integration
-					* API implementations - which direction?
-				end note
-
-				rectangle "Essence" as EssenceLayer {
-					note as noteEssence
-						* Pure domain logic
-						* Algorithms & rules
-						* No outward dependencies:
-						** completely self-contained
-						** no calls to external systems
-						** no hardware access
-						* 100 % testable
-					end note
-
-					class PIDController {
-						+PIDController(double kp, double ki, double kd, double integralLimit)
-						+double calculate(double current, double target, double deltaTime)
-						+void reset()
-						+void setGains(double kp, double ki, double kd)
-						+PIDGains getGains()
-					}
-					struct PIDGains <<Record>> {
-						double kp
-						double ki
-						double kd
-					}
-					class MotorStateEstimator {
-						+MotorStateEstimator()
-						+double estimateSpeed(int currentPosition, double deltaTime)
-						+void reset()
-					}
-					PIDController ..> PIDGains
-				}
-
-				class MotorControlRealization {
-					+MotorControlRealization(HardwareRegisters, InterruptHandler, RTOSTimer)
-					-- ESSENCE COMPONENTS: Pure domain logic --
-					-PIDController pidController;
-					-MotorStateEstimator stateEstimator;
-					-- CONTRACT REQUIREMENTS: Services from other capabilities --
-					-SensorService sensorService;			// Injected by CapabilityLifecycleManager
-					-ActuatorService actuatorService;		// Injected by CapabilityLifecycleManager
-					-DiagnosticService diagnosticService;	// Optional, may be null
-					--
-					+void initializeHardware()
-					-void controlLoopInterrupt()
-					+void calibrateSensors()
-					+void loadConfigurationFromFile(String filePath)
-					+CompletableFuture<Void> updateConfigurationFromServer(String serverUrl)
-					+void updateConfiguration(String configJson)
-					-- Partial implementation of MotorControlService --
-					+void setTargetSpeed(double speedRPM)
-					+MotorStatus getCurrentStatus()
-					+void emergencyStop()
-					-- LifecycleManager dependency injection --
-					+void injectSensorService(SensorService sensorService)
-					+void injectActuatorService(ActuatorService actuatorService)
-					+void injectDiagnosticService(DiagnosticService diagnosticService)
-					--
-					-void logDiagnostic(String severity, String message)
-				}
-				MotorControlRealization *--> PIDController
-				MotorControlRealization *--> MotorStateEstimator
-			} /' Realization Layer '/
-
 			class MotorControlAdapter {
 				+MotorControlAdapter(MotorControlRealization)
 				-- Implementation of MotorControlService --
@@ -272,30 +191,84 @@ rectangle "Motor Control Capability" as MotorControlCapabilityPkg {
 			}
 		} /' Adaptation Layer '/
 
-		class MotorControlCapability {
-			+MotorControlCapability(HardwareRegisters, InterruptHandler, RTOSTimer)
-			' -- ESSENCE: Pure domain logic --
-			' -PIDController pidController
-			' -MotorStateEstimator stateEstimator
-			-- REALIZATION: Infrastructure integration --
-			-MotorControlRealization realization
-			-- ADAPTATION: External interface --
-			-MotorControlAdapter adapter
-			-- CONTRACT: Formal interface agreement --
-			-MotorControlContract contract
-			-- LIFECYCLE MANAGEMENT METHODS --
-			+void initialize()
-			+void start()
-			+void stop()
-			+void cleanup()
-			-- LIFECYCLE MANAGEMENT DEPENDENCY INJECTION --
-			+void injectDependency(Class<?> contractType, Object implementation)
-			+Object getContractImplementation(Class<?> contractType)
-			-- CONTRACT ACCESS --
-			MotorControlContract getContract()
-		}
-		MotorControlCapability <|.. CapabilityInstance
+		rectangle "Realization Layer" as RealizationLayer {
+			class MotorControlRealization {
+				+MotorControlRealization(HardwareRegisters, InterruptHandler, RTOSTimer)
+				-- ESSENCE COMPONENTS: Pure domain logic --
+				-PIDController pidController;
+				-MotorStateEstimator stateEstimator;
+				-- CONTRACT REQUIREMENTS: Services from other capabilities --
+				-SensorService sensorService;			// Injected by CapabilityLifecycleManager
+				-ActuatorService actuatorService;		// Injected by CapabilityLifecycleManager
+				-DiagnosticService diagnosticService;	// Optional, may be null
+				--
+				+void initializeHardware()
+				-void controlLoopInterrupt()
+				+void calibrateSensors()
+				+void loadConfigurationFromFile(String filePath)
+				+CompletableFuture<Void> updateConfigurationFromServer(String serverUrl)
+				+void updateConfiguration(String configJson)
+				-- Partial implementation of MotorControlService --
+				+void setTargetSpeed(double speedRPM)
+				+MotorStatus getCurrentStatus()
+				+void emergencyStop()
+				-- LifecycleManager dependency injection --
+				+void injectSensorService(SensorService sensorService)
+				+void injectActuatorService(ActuatorService actuatorService)
+				+void injectDiagnosticService(DiagnosticService diagnosticService)
+				--
+				-void logDiagnostic(String severity, String message)
+			}
+		} /' Realization Layer '/
+
+		rectangle "Essence" as EssenceLayer {
+			class PIDController {
+				+PIDController(double kp, double ki, double kd, double integralLimit)
+				+double calculate(double current, double target, double deltaTime)
+				+void reset()
+				+void setGains(double kp, double ki, double kd)
+				+PIDGains getGains()
+			}
+			struct PIDGains <<Record>> {
+				double kp
+				double ki
+				double kd
+			}
+			class MotorStateEstimator {
+				+MotorStateEstimator()
+				+double estimateSpeed(int currentPosition, double deltaTime)
+				+void reset()
+			}
+			PIDController ..> PIDGains
+		} /' EssenceLayer '/
+
+		MotorControlRealization *--> PIDController
+		MotorControlRealization *--> MotorStateEstimator
 	} /' Nucleus '/
+
+	class MotorControlCapability {
+		+MotorControlCapability(HardwareRegisters, InterruptHandler, RTOSTimer)
+		' -- ESSENCE: Pure domain logic --
+		' -PIDController pidController
+		' -MotorStateEstimator stateEstimator
+		-- REALIZATION: Infrastructure integration --
+		-MotorControlRealization realization
+		-- ADAPTATION: External interface --
+		-MotorControlAdapter adapter
+		-- CONTRACT: Formal interface agreement --
+		-MotorControlContract contract
+		-- LIFECYCLE MANAGEMENT METHODS --
+		+void initialize()
+		+void start()
+		+void stop()
+		+void cleanup()
+		-- LIFECYCLE MANAGEMENT DEPENDENCY INJECTION --
+		+void injectDependency(Class<?> contractType, Object implementation)
+		+Object getContractImplementation(Class<?> contractType)
+		-- CONTRACT ACCESS --
+		MotorControlContract getContract()
+	}
+	MotorControlCapability ..|> CapabilityInstance
 
 	MotorMgmtProvisionsPkg .[hidden]..> NucleusPkg
 	MotorMgmtRequirementsPkg .[hidden]..> NucleusPkg
@@ -586,7 +559,7 @@ rectangle "Diagnostic Logging Capability" as DiagnosticLoggingCapabilityPkg {
 			-- CONTRACT ACCESS --
 			+DiagnosticLoggingContract getContract()
 		}
-		DiagnosticLoggingCapability <|.. CapabilityInstance
+		DiagnosticLoggingCapability ..|> CapabilityInstance
 		DiagnosticLoggingCapability *--> DiagnosticLoggingContract
 	} /' Nucleus '/
 }
@@ -598,6 +571,7 @@ SensorMgmtProtocolDiagnosticReporting ..> DiagnosticLoggingProtocolLogIngestion
 
 ActuatorMgmtRequirementDiagnosticService ..> DiagnosticLoggingProvidesDiagnosticService
 ActuatorMgmtProtocolSafetyMonitoring ..> DiagnosticLoggingProtocolLogIngestion
+
 
 ' Hidden dependencies help for layout
 MotorMgmtProvisionsPkg .[hidden].....> DiagnosticLoggingCapabilityPkg
