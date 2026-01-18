@@ -1,0 +1,56 @@
+@startuml cca-core-contracts-v0.2
+set separator ::
+
+rectangle "Capability Contract" {
+	abstract class CapabilityContract {
+		#List<Provision> provisions
+		#List<Requirement> requirements
+		#List<Protocol> protocols
+		name: string
+		version: SemanticVersion
+		+List<Provision> getProvisions()
+		+List<Requirement> getRequirements()
+		+List<Protocol> getProtocols()
+	}
+	' Provision - Represents an interface provided by a capability
+	struct Provision <<Record>> {
+		String name
+		Class<?> interfaceType
+		String description
+	}
+	' Requirement - Represents an interface required by a capability
+	struct Requirement <<Record>> {
+		String name
+		Class<?> interfaceType
+		boolean optional
+		String description
+	}
+	' Protocol - Describes how interaction occurs
+	struct Protocol <<Record>> {
+		String name
+		CommunicationMechanism mechanism
+		DataFormat dataFormat
+		Map<String, String> qualityAttributes
+	}
+	enum CommunicationMechanism {
+		DIRECT_CALL 	// In-process, synchronous
+		ASYNC_MESSAGE	// Asynchronous messaging
+		SHARED_MEMORY	// Direct memory access
+		INTERRUPT_DRIVEN // Hardware interrupt
+	}
+	enum DataFormat {
+		BINARY
+		JSON
+		PROTOBUF
+		RAW_MEMORY
+	}
+	' Relations of contract elements
+	CapabilityContract *--> Provision
+	CapabilityContract *--> Requirement
+	CapabilityContract *-right-> Protocol
+	Protocol ..> CommunicationMechanism
+	Protocol ..> DataFormat
+}
+CapabilityContract <|-- CapabilityNucleusPkg::CapabilityAdaptationLayer::CapabilityContractImpl
+
+@enduml
