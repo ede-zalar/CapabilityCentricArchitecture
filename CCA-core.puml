@@ -1,10 +1,68 @@
 @startuml cca-core-elements-v0.2
 
+' ===== CAPABILITY NUCLEUS STRUCTURE =====
+rectangle "Nucleus" as NucleusPkg {
+	rectangle "Adaptation Layer" as AdaptationLayer {
+		note as noteAdaptationLayer
+			Implements the interfaces through which other
+			capabilities interact with this capability:
+			* REST endpoints
+			* GraphQL interfaces
+			* Message bus subscribers/publishers
+			* Event publishers/listeners
+		end note
+	}
+	rectangle "Realization Layer" as RealizationLayer {
+		note as noteRealizationLayer
+			Implements the access to any external infrastructure
+			necessary to support the domain logic of the essence:
+			* Hardware integration
+			* Database access
+			* Message queue integration
+			* API implementations - which direction?
+		end note
+	}
+	rectangle "Essence" as EssenceLayer {
+		note as noteEssence
+			* Pure domain logic
+			* Algorithms & rules
+			* No outward dependencies:
+			** completely self-contained
+			** no calls to external systems
+			** no hardware access
+			* 100 % testable
+		end note
+	}
+	AdaptationLayer *--> RealizationLayer
+	RealizationLayer *--> EssenceLayer
+}
+
+rectangle "External System" as ExternalSystemPkg {
+	note as noteExtSystem
+	* TODO
+	end note
+}
+
+rectangle "External technical infrastructure" as ExternalInfrastructurePkg {
+	note as noteExtInfra
+	* hardware registers
+	* databases
+	* message queues
+	* web requests
+	* etc.
+	end note
+}
+
+AdaptationLayer .up.> ExternalSystemPkg
+RealizationLayer .up.> ExternalInfrastructurePkg 
+
 rectangle "Capability Contract" {
 	abstract class CapabilityContract {
 		#List<Provision> provisions
 		#List<Requirement> requirements
 		#List<Protocol> protocols
+		name: string
+		version: SemanticVersion
 		+List<Provision> getProvisions()
 		+List<Requirement> getRequirements()
 		+List<Protocol> getProtocols()
@@ -48,6 +106,8 @@ rectangle "Capability Contract" {
 	Protocol ..> CommunicationMechanism
 	Protocol ..> DataFormat
 }
+
+AdaptationLayer ..> CapabilityContract : implements
 
 rectangle "Capability Lifecycle Management" {
 	enum LifecycleState {
