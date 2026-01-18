@@ -1,0 +1,69 @@
+@startuml cca-lifecycle-management
+
+rectangle "Capability Lifecycle Management" {
+	enum LifecycleState {
+		NOT_CREATED
+		CREATED
+		INITIALIZED
+		DEPENDENCIES_INJECTED
+		STARTED
+		STOPPED
+		CLEANED_UP
+	}
+
+	interface CapabilityInstance {
+		void initialize()
+		void start()
+		void stop()
+		void cleanup()
+		Object getContractImplementation(Class<?> contractType)
+		void injectDependency(Class<?> contractType, Object implementation)
+	}
+	class CapabilityRegistry {
+		-Map<String, CapabilityDescriptor> descriptors
+		-Map<String, CapabilityInstance> instances
+		-Map<Class<?>, String> provisionToCapabilityMap
+		-DirectedGraph<String> dependencyGraph
+		+public CapabilityRegistry()
+		+void registerCapability(CapabilityDescriptor descriptor)
+		+void registerInstance(String capabilityId, CapabilityInstance instance)
+		+void buildDependencyGraph()
+		+List<String> getInitializationOrder()
+		+CapabilityInstance getInstance(String capabilityId)
+		+CapabilityDescriptor getDescriptor(String capabilityId)
+		+String findProvider(Class<?> contractType)
+		+Set<String> getAllCapabilityIds()
+	}
+	class CapabilityFactory {
+		-Map<String, Object> constructorParameters
+		+CapabilityFactory()
+		+void registerParameters(String capabilityType, Object... params)
+		+CapabilityInstance createInstance(CapabilityDescriptor descriptor)
+		-CapabilityInstance createWithParameters(Class<? extends CapabilityInstance> clazz, Object[] params)
+	}
+	class CapabilityLifecycleManager {
+		-CapabilityRegistry registry
+		-CapabilityFactory factory
+		-Map<String, LifecycleState> stateMap
+		+CapabilityLifecycleManager(CapabilityRegistry registry, CapabilityFactory factory)
+		+void initializeAll()
+		-void initializeCapability(String capabilityId)
+		+void injectDependencies()
+		-void injectDependenciesForCapability(String capabilityId)
+		+void startAll()
+		-void startCapability(String capabilityId)
+		+void stopAll()
+		-void stopCapability(String capabilityId)
+		+void cleanupAll()
+		-void cleanupCapability(String capabilityId)
+		+LifecycleState getState(String capabilityId)
+		+void startSystem()
+		+void shutdownSystem()
+	}
+	LifecycleState <.. CapabilityLifecycleManager
+	CapabilityLifecycleManager .right.> CapabilityRegistry
+	CapabilityLifecycleManager ..> CapabilityFactory
+	CapabilityLifecycleManager ..> CapabilityInstance
+}
+
+@enduml

@@ -1,0 +1,27 @@
+@startuml cca-core-nucleus-v0.2
+set separator ::
+
+!include ./CCA-Nucleus.def.iuml
+remove CapabilityNucleusPkg::CapabilityAdaptationLayer::CapabilityContractImpl
+
+rectangle "External System" as ExternalSystemPkg {
+	note as noteExtSystem
+		Represents any external system which 
+		the Capability needs to communicate.
+	end note
+}
+
+rectangle "External technical infrastructure" as ExternalInfrastructurePkg {
+	note as noteExtInfra
+		* hardware registers
+		* databases
+		* message queues
+		* web requests
+		* etc.
+	end note
+}
+
+ExternalSystemPkg <.. CapabilityAdaptationLayer
+ExternalInfrastructurePkg <.. CapabilityRealizationLayer
+
+@enduml

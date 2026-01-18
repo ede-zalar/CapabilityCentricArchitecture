@@ -1,0 +1,9 @@
+@startuml cca-overview
+set separator ::
+
+!include ./CCA-Nucleus.def.iuml
+!include ./CCA-Contracts.def.iuml
+
+hide members
+
+@enduml
