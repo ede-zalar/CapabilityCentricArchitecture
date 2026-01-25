@@ -1,0 +1,47 @@
+@startuml cca-core-nucleus-v0.2
+
+rectangle "Nucleus" as CapabilityNucleusPkg {
+	rectangle "Adaptation Layer" as CapabilityAdaptationLayer {	
+		note as noteAdaptationLayer
+			Implements the interfaces 
+			through which other capabilities 
+			interact with this capability:
+			* REST endpoints
+			* GraphQL interfaces
+			* Message bus subscribers/publishers
+			* Event publishers/listeners
+		end note
+
+		rectangle "Realization Layer" as CapabilityRealizationLayer {
+			note as noteRealizationLayer
+				Technology specific implementation which 
+				provides the access to any external infrastructure 
+				necessary to support 
+				the domain logic of the essence:
+				* Hardware integration
+				* Database access
+				* Message queue integration
+				* API implementations - which direction?
+			end note
+
+			rectangle "Essence" as CapabilityEssenceLayer {
+				note as noteEssence
+					* Pure domain logic
+					* Algorithms & rules
+					* //Implements Capability Contract//
+					* No other outward dependencies:
+					** completely self-contained
+					** no calls to external systems
+					** no hardware access
+					* 100 % testable
+				end note
+			}
+		}
+
+		class CapabilityContractImpl {
+			+{static} CapabilityContractImpl create()
+		}
+	}
+}
+
+@enduml
