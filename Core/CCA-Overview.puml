@@ -4,6 +4,52 @@ set separator ::
 !include ./CCA-Nucleus.def.iuml
 !include ./CCA-Contracts.def.iuml
 
+class Registry {
+	registerCapability(CapabilityDescriptor)
+	bindCapabilities(consumer, provider, contractType)
+	CapabilityDescriptor[] getInitializationOrder()
+}
+
+note as noteRegistry
+	The Capability Registry is 
+	the central coordination point that:
+	* Manages all capabilities and their metadata
+	* Tracks contracts and bindings
+	* Actively prevents circular dependencies!
+	* Provides topological sorting for initialization order
+	* Enables dependency injection
+end note
+
+class CapabilityDescriptor {
+	+createInstance(): CapabilityInstance
+}
+
+class CapabilityInstance {
+	-essence
+	-realizationImpl[]
+	-dependencies[]
+	+void initialize()
+	+void start()
+	+void stop()
+	+void releaseResources()
+	+void closeConnections()
+	+void cleanup()
+}
+
+class CapabilityLifecycleManager {
+	-registry
+	-initializedCapabilities[]
+	+void initializeAll()
+	-void initializeCapability(CapabilityDescriptor)
+	+void shutdownAll()
+	-void shutdownCapability(CapabilityInstance)
+}
+CapabilityLifecycleManager o--> Registry
+CapabilityLifecycleManager ..> CapabilityDescriptor
+CapabilityLifecycleManager ..> CapabilityInstance : use
+
+CapabilityDescriptor ..> CapabilityInstance : creates
+
 hide members
 
 @enduml
