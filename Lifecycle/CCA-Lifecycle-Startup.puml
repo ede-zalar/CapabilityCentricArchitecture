@@ -1,0 +1,50 @@
+@startuml CCA-Lifecycle-Management-Startup
+participant Host
+participant CapabilityFactory
+participant configuration
+participant CapabilityRegistry
+participant LifecycleManager
+participant OtherCapabilityDescriptor
+participant OtherCapabilityInstance
+
+[-> Host++ : start
+Host -> CapabilityFactory** : new
+Host -> CapabilityRegistry** : new(configuration)
+Host -> LifecycleManager** : new
+Host -> LifecycleManager++ : initialize(registry, factory)
+	LifecycleManager -> CapabilityRegistry++ : registerCapabilities(configuration)
+		loop read all configured capabilities
+			CapabilityRegistry -> configuration : read capability info
+			CapabilityRegistry -> CapabilityFactory++ : createDescriptor(configuration)
+			create OtherCapabilityDescriptor
+			CapabilityFactory -> OtherCapabilityDescriptor : new
+			return
+			CapabilityRegistry -> CapabilityRegistry : add to registered\ncapabilities
+		end loop
+	return
+	LifecycleManager -> CapabilityRegistry++ : getInitializationOrder()
+	return
+	loop for each registered capability
+		LifecycleManager -> OtherCapabilityDescriptor++ : createInstance()
+		OtherCapabilityDescriptor -> OtherCapabilityInstance** : new
+		return otherCapabilityInstance
+		LifecycleManager -> OtherCapabilityInstance++ : injectDependencies()
+		return
+		LifecycleManager -> OtherCapabilityInstance++ : initialize()
+		return
+		LifecycleManager -> LifecycleManager : add to initialized capabilities
+	end loop
+return report initialized and missing capabilities
+Host -> LifecycleManager++ : startup()
+	alt If NOT all mandatory capabilities are initialized
+		LifecycleManager -> LifecycleManager : stop execution
+	else
+		loop for each initialized capability
+			LifecycleManager -> OtherCapabilityInstance++ : start()
+			return
+			LifecycleManager -> LifecycleManager : add to started capabilities
+		end loop
+	end
+return
+
+@enduml

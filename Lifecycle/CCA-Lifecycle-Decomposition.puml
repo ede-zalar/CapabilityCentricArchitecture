@@ -1,56 +1,4 @@
-@startuml cca-lifecycle-management-startup
-participant Host
-participant configuration
-participant CapabilityFactory
-participant CapabilityRegistry
-participant LifecycleManager
-participant OtherCapabilityDescriptor
-participant OtherCapabilityInstance
-
-[-> Host++ : start
-Host -> CapabilityFactory** : new
-Host -> CapabilityRegistry** : new(configuration)
-Host -> LifecycleManager** : new
-Host -> LifecycleManager++ : initialize(registry, factory)
-	LifecycleManager -> CapabilityRegistry++ : register capabilities
-		loop read all configured capabilities
-			CapabilityRegistry -> configuration : read capability info
-			CapabilityRegistry -> CapabilityFactory++ : create CapabilityDescriptor from info
-			create OtherCapabilityDescriptor
-			CapabilityFactory -> OtherCapabilityDescriptor : new
-			return
-			CapabilityRegistry -> CapabilityRegistry : store in Map
-		end loop
-	return
-	LifecycleManager -> CapabilityRegistry++ : getInitializationOrder()
-	return
-	loop for each registered capability
-		LifecycleManager -> OtherCapabilityDescriptor++ : createInstance()
-		OtherCapabilityDescriptor -> OtherCapabilityInstance** : new
-		return otherCapabilityInstance
-		LifecycleManager -> OtherCapabilityInstance++ : injectDependencies()
-		return
-		LifecycleManager -> OtherCapabilityInstance++ : initialize()
-		return
-		LifecycleManager -> LifecycleManager : add to initialized capabilities
-	end loop
-	LifecycleManager -> LifecycleManager : report any missing capability
-return 
-Host -> LifecycleManager++ : startup()
-	alt If NOT all mandatory capabilities are initialized
-		LifecycleManager -> LifecycleManager : stop execution
-	else
-		loop for each initialized capability
-			LifecycleManager -> OtherCapabilityInstance++ : start()
-			return
-			LifecycleManager -> LifecycleManager : add to started capabilities
-		end loop
-	end
-return
-
-@enduml
-
-@startuml cca-lifecycle-management
+@startuml CCA-Lifecycle-Management-Decomposition
 
 rectangle "Capability Lifecycle Management" {
 	rectangle "Adaptation" {
@@ -84,6 +32,11 @@ rectangle "Capability Lifecycle Management" {
 				+CapabilityInstance createInstance(CapabilityDescriptor descriptor)
 				-CapabilityInstance createWithParameters(Class<? extends CapabilityInstance> clazz, Object[] params)
 			}
+			note bottom of CapabilityFactory
+				This factory is responsible 
+				to create instances of the main objects 
+				from other capabilities.
+			end note
 			rectangle "Essence" {
 				class CapabilityLifecycleManager {
 					-CapabilityRegistry registry
